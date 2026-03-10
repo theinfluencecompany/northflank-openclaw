@@ -89,6 +89,104 @@ Both the URL and token are printed by the deploy script.
    - Full exec permissions (no approval prompts)
 4. Patches the nginx entrypoint to remove the browser sidecar proxy
 
+## Discord with personal accounts (not bots)
+
+OpenClaw's Discord integration normally requires bot tokens. This repo includes a patched Dockerfile (`Dockerfile.discord`) that removes the `Bot ` auth prefix so **personal Discord account tokens** work instead.
+
+### Deploy a Discord instance
+
+```bash
+DOCKERFILE=Dockerfile.discord ./deploy.sh discord-agent
+```
+
+Or manually set the Dockerfile path to `/Dockerfile.discord` when creating the service on Northflank.
+
+### Get your Discord user token
+
+1. Open Discord in a web browser (not the desktop app)
+2. Open DevTools (F12) → Network tab
+3. Send any message or navigate to a channel
+4. Find any request to `discord.com/api` → click it
+5. In the Headers tab, copy the `Authorization` value (it will NOT start with `Bot`)
+
+### Connect accounts via the Control UI
+
+Open the OpenClaw Control UI and go to **Settings → Config**. Add your Discord accounts:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "accounts": {
+        "main": {
+          "token": "your-discord-user-token-here",
+          "groupPolicy": "open",
+          "dm": { "enabled": true, "policy": "open" }
+        },
+        "alt": {
+          "token": "second-account-token",
+          "groupPolicy": "open"
+        }
+      },
+      "defaultAccount": "main"
+    }
+  }
+}
+```
+
+Or tell the OpenClaw chat directly:
+
+> Configure Discord with my personal account token. The token is stored in environment variable DISCORD_TOKEN_1. Use groupPolicy "open" and enable DMs.
+
+### Multi-account capabilities
+
+Each account gets:
+- Independent guild/channel configuration
+- Separate DM policies and allowlists
+- Per-account tool policies and exec approval routing
+- Individual streaming and message formatting settings
+
+### Per-guild and per-channel config
+
+```json
+{
+  "channels": {
+    "discord": {
+      "accounts": {
+        "main": {
+          "token": "...",
+          "guilds": {
+            "SERVER_ID": {
+              "requireMention": false,
+              "channels": {
+                "CHANNEL_ID": {
+                  "enabled": true,
+                  "systemPrompt": "You are a helpful assistant in this channel."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### What the Discord patch does
+
+OpenClaw and its `@buape/carbon` Discord library hardcode `Authorization: Bot ${token}` in 5 places. The `Dockerfile.discord` patches all of them to use `Authorization: ${token}` instead, which is the format personal tokens use.
+
+Patched files:
+- `/opt/openclaw/app/dist/channels/plugins/actions/discord.js` (2 occurrences)
+- `/opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/sharding/ShardingPlugin.js`
+- `/opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/gateway/GatewayPlugin.js`
+- `/opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/linked-roles/LinkedRoles.js`
+
+### Important
+
+Using personal tokens for automation violates Discord's Terms of Service. Accounts may be suspended if detected. Use at your own risk.
+
 ## Security notes
 
 This setup is designed for **personal/team use**, not public-facing deployments:

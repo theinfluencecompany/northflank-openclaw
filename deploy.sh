@@ -11,6 +11,7 @@ set -euo pipefail
 # Example:
 #   ./deploy.sh my-assistant
 #   ./deploy.sh tiktok-bot
+#   DOCKERFILE=Dockerfile.discord ./deploy.sh discord-agent
 #
 # This creates a Northflank project "openclaw" (if needed) and deploys
 # a combined service that builds the custom Dockerfile from this repo.
@@ -24,6 +25,7 @@ REGION="${NF_REGION:-us-west}"
 PLAN="${NF_PLAN:-nf-compute-20}"
 MODEL="${OPENCLAW_MODEL:-openai/gpt-5.4}"
 REPO_URL="${REPO_URL:-https://github.com/theinfluencecompany/northflank-openclaw}"
+DOCKERFILE="${DOCKERFILE:-Dockerfile}"
 
 NF_API="https://api.northflank.com/v1"
 AUTH="Authorization: Bearer ${NF_API_TOKEN}"
@@ -72,13 +74,13 @@ SERVICE_RESP=$(nf POST "/projects/${PROJECT_NAME}/services/combined" "$(cat <<EO
     "projectUrl": "${REPO_URL}",
     "projectType": "github",
     "projectBranch": "main",
-    "dockerFilePath": "/Dockerfile",
+    "dockerFilePath": "/${DOCKERFILE}",
     "dockerWorkDir": "/"
   },
   "buildSettings": {
     "dockerfile": {
       "buildEngine": "kaniko",
-      "dockerFilePath": "/Dockerfile",
+      "dockerFilePath": "/${DOCKERFILE}",
       "dockerWorkDir": "/"
     }
   }

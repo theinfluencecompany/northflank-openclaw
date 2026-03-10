@@ -1,0 +1,28 @@
+FROM coollabsio/openclaw:latest
+
+# System dependencies for headless Chromium + sudo
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+    libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2 libatspi2.0-0 \
+    libxshmfence1 fonts-liberation xdg-utils wget ca-certificates sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Gateway config: allow all origins, disable device auth, full exec permissions
+RUN mkdir -p /app/config && \
+    echo '{"gateway":{"controlUi":{"allowedOrigins":["*"],"dangerouslyAllowHostHeaderOriginFallback":true,"allowInsecureAuth":true,"dangerouslyDisableDeviceAuth":true,"enabled":true}},"agents":{"defaults":{"session":{"elevatedLevel":"full","execSecurity":"full","execAsk":"off","execHost":"gateway"}}}}' \
+    > /app/config/openclaw.json
+
+# Patch: remove browser sidecar proxy
+RUN sed -i 's|proxy_pass http://browser:3000/;|return 404;|' /app/scripts/entrypoint.sh
+
+# Patch: remove "Bot " prefix from Discord API auth headers so personal account tokens work
+# OpenClaw discord plugin (2 occurrences)
+RUN sed -i 's|`Bot ${token}`|`${token}`|g' /opt/openclaw/app/dist/channels/plugins/actions/discord.js && \
+    sed -i 's|`Bot ${botToken}`|`${botToken}`|g' /opt/openclaw/app/dist/channels/plugins/actions/discord.js && \
+    # Carbon library (3 occurrences)
+    sed -i 's|`Bot ${client.options.token}`|`${client.options.token}`|g' /opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/sharding/ShardingPlugin.js && \
+    sed -i 's|`Bot ${client.options.token}`|`${client.options.token}`|g' /opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/gateway/GatewayPlugin.js && \
+    sed -i 's|`Bot ${this.client.options.token}`|`${this.client.options.token}`|g' /opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/linked-roles/LinkedRoles.js
+
+EXPOSE 8080
