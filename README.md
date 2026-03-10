@@ -1,0 +1,112 @@
+# OpenClaw on Northflank
+
+Deploy [OpenClaw](https://openclaw.ai) AI assistants on [Northflank](https://northflank.com) with one command.
+
+## What you get
+
+- OpenClaw instance with full browser automation (Playwright/Chromium)
+- GPT-5.4 by default (configurable)
+- No approval prompts — full exec permissions out of the box
+- Web-accessible Control UI with token auth
+- Each instance is isolated with its own gateway token
+
+## Prerequisites
+
+- A [Northflank](https://app.northflank.com) account with a team API key
+- An [OpenAI](https://platform.openai.com) API key
+- `curl`, `jq`, and `openssl` on your machine
+
+## Quick start
+
+```bash
+git clone https://github.com/theinfluencecompany/northflank-openclaw.git
+cd northflank-openclaw
+
+export NF_API_TOKEN="your-northflank-team-api-key"
+export OPENAI_API_KEY="sk-..."
+
+./deploy.sh my-assistant
+```
+
+The script will:
+1. Create a `openclaw` project on Northflank (if it doesn't exist)
+2. Build the custom Docker image from this repo
+3. Deploy it as a combined service
+4. Print the URL and gateway token
+
+## Deploy multiple instances
+
+```bash
+./deploy.sh tiktok-bot
+./deploy.sh discord-bot
+./deploy.sh research-agent
+```
+
+Each gets its own URL, gateway token, and isolated workspace.
+
+## Configuration
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `NF_API_TOKEN` | (required) | Northflank team API key |
+| `OPENAI_API_KEY` | (required) | OpenAI API key |
+| `NF_REGION` | `us-west` | Northflank deployment region |
+| `NF_PLAN` | `nf-compute-20` | Compute plan (`nf-compute-20`, `nf-compute-50`, etc.) |
+| `OPENCLAW_MODEL` | `openai/gpt-5.4` | Default LLM model |
+| `REPO_URL` | this repo | Git repo URL for the Dockerfile |
+
+## Use a different LLM
+
+```bash
+# Anthropic Claude
+export OPENAI_API_KEY="not-used"  # still required by script, can be dummy
+OPENCLAW_MODEL="anthropic/claude-sonnet-4-6" ./deploy.sh my-agent
+
+# Then set the real key in Northflank:
+curl -X POST "https://api.northflank.com/v1/projects/openclaw/services/my-agent/runtime-environment" \
+  -H "Authorization: Bearer $NF_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"runtimeEnvironment":{"ANTHROPIC_API_KEY":"sk-ant-..."}}'
+```
+
+## Access the Control UI
+
+Open in your browser:
+
+```
+https://<your-service-url>?token=<gateway-token>
+```
+
+Both the URL and token are printed by the deploy script.
+
+## What the Dockerfile does
+
+1. Installs Chromium system libraries (for Playwright browser automation)
+2. Installs `sudo` (so the agent can install additional packages at runtime)
+3. Configures the gateway:
+   - Allow all CORS origins (for remote access)
+   - Disable device auth (no pairing required)
+   - Full exec permissions (no approval prompts)
+4. Patches the nginx entrypoint to remove the browser sidecar proxy
+
+## Security notes
+
+This setup is designed for **personal/team use**, not public-facing deployments:
+
+- `dangerouslyDisableDeviceAuth: true` — skips device pairing
+- `execSecurity: full` — agent can run any command
+- `allowedOrigins: ["*"]` — any origin can connect to the Control UI
+- Gateway token is the only auth barrier
+
+For production use, consider restricting origins and enabling device auth.
+
+## Troubleshooting
+
+| Issue | Fix |
+|---|---|
+| 502/503 after deploy | Wait 2 minutes for the gateway to start |
+| "origin not allowed" | Already fixed in the Dockerfile config |
+| "device identity required" | Already fixed with `dangerouslyDisableDeviceAuth` |
+| "sudo: not found" | Already fixed — sudo is installed in the image |
+| Chromium won't launch | Already fixed — all system libs are installed |
+| Build fails | Check that the repo URL is accessible (public) |
