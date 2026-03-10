@@ -183,6 +183,32 @@ Patched files:
 - `/opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/gateway/GatewayPlugin.js`
 - `/opt/openclaw/app/node_modules/@buape/carbon/dist/src/plugins/linked-roles/LinkedRoles.js`
 
+### Residential proxy (required for cloud hosting)
+
+Discord blocks selfbot connections from datacenter IPs. The `Dockerfile.discord` includes `proxychains4` to route all traffic through a residential SOCKS5 proxy.
+
+**Setup:**
+
+1. Get a residential SOCKS5 proxy (e.g., [IPRoyal](https://iproyal.com/residential-proxies/) — $1.75/GB, ~$0.10/month for 10k messages)
+
+2. Set these env vars on your Northflank service:
+
+```bash
+PROXY_HOST=geo.iproyal.com
+PROXY_PORT=12321
+PROXY_USER=your_username
+PROXY_PASS=your_password
+DISCORD_BOT_TOKEN=your_discord_user_token
+```
+
+3. If `PROXY_HOST` is not set, the proxy is skipped and OpenClaw runs directly (useful for non-Discord instances)
+
+**How it works:** The entrypoint wrapper (`entrypoint-wrapper.sh`) generates a proxychains4 config at runtime from env vars, with `localnet` exclusions for localhost/private networks so internal container communication isn't proxied. Then it wraps the original OpenClaw entrypoint with `proxychains4 -q`.
+
+**Why not OpenClaw's built-in proxy?** OpenClaw has a `channels.discord.proxy` config option, but it only proxies the WebSocket gateway connection. REST API calls (sending messages) bypass it and go through the datacenter IP, which Discord blocks. `proxychains4` intercepts ALL outbound TCP at the libc level, so everything goes through the proxy.
+
+See [RESIDENTIAL-PROXY.md](RESIDENTIAL-PROXY.md) for the full technical writeup.
+
 ### Important
 
 Using personal tokens for automation violates Discord's Terms of Service. Accounts may be suspended if detected. Use at your own risk.
@@ -208,3 +234,5 @@ For production use, consider restricting origins and enabling device auth.
 | "sudo: not found" | Already fixed — sudo is installed in the image |
 | Chromium won't launch | Already fixed — all system libs are installed |
 | Build fails | Check that the repo URL is accessible (public) |
+| Discord 503 / gateway crash | Discord token set without proxy — set PROXY_HOST or remove DISCORD_BOT_TOKEN |
+| Discord rejects connection | Datacenter IP detected — ensure proxychains is working (check PROXY_* env vars) |
